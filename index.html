@@ -170,6 +170,16 @@
   .sheet-opt .icon{font-size:20px;}
   .sheet-opt.active.go{background:var(--red-soft);border-color:var(--red);color:var(--red);}
   .sheet-opt.active.lesson{background:#E6E3E0;border-color:var(--charcoal);color:var(--charcoal);}
+  .sheet-opt.active.memo{background:var(--blue-soft);border-color:var(--blue);color:var(--blue);}
+
+  .memo-compose{
+    display:none;
+    background:var(--ivory);
+    border-radius:14px;
+    padding:14px;
+    margin-bottom:14px;
+  }
+  .memo-compose.open{display:block;}
   .sheet-close{
     width:100%;padding:13px;border:none;border-radius:12px;
     background:var(--ivory);color:var(--ink);font-weight:700;font-size:14px;cursor:pointer;
@@ -213,6 +223,24 @@
   }
   .entry-tag.eddie{background:var(--eddie-soft);color:var(--eddie);}
   .entry-tag.sam{background:var(--sam-soft);color:var(--sam);}
+  .entry-actions{display:flex;gap:10px;margin-top:6px;}
+  .entry-action-btn{
+    background:none;border:none;padding:0;
+    font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;
+  }
+  .entry-action-btn.delete{color:var(--red);}
+  .entry-edit-form textarea, .entry-edit-form input{
+    width:100%;border:1.5px solid var(--line);border-radius:8px;
+    padding:8px 10px;font-size:12.5px;font-family:'Noto Sans KR',sans-serif;
+    background:#fff;color:var(--ink);margin-bottom:6px;resize:none;
+  }
+  .entry-edit-actions{display:flex;gap:8px;}
+  .entry-edit-actions button{
+    flex:1;padding:7px 0;border-radius:8px;border:none;
+    font-size:12px;font-weight:700;cursor:pointer;
+  }
+  .entry-edit-actions .save-btn{background:var(--ink);color:#fff;}
+  .entry-edit-actions .cancel-btn{background:var(--card);border:1.5px solid var(--line);color:var(--muted);}
 
   .journal-more{
     width:100%;margin-top:8px;padding:10px;
@@ -284,17 +312,6 @@
     <div class="journal-title">얼렁뚱땡 탁구단의 운동 일지</div>
     <div id="journalEntries"></div>
     <button class="journal-more" id="journalMoreBtn" onclick="toggleOlderEntries()">▼ 이전 일지 더 보기 (3개 더)</button>
-
-    <div class="journal-add">
-      <div class="author-select">
-        <button class="author-btn eddie active" id="authorEddieBtn" onclick="selectAuthor('eddie')">Eddie</button>
-        <button class="author-btn sam" id="authorSamBtn" onclick="selectAuthor('sam')">Samantha</button>
-      </div>
-      <input type="date" class="journal-input" id="journalDate">
-      <textarea class="journal-input" id="journalText" rows="2" placeholder="오늘 어땠나요?"></textarea>
-      <input class="journal-input" id="journalTag" placeholder="태그 (예: 폼 교정, 스매싱 연습)">
-      <button class="journal-submit" onclick="addJournalEntry()">기록하기</button>
-    </div>
   </div>
 </div>
 
@@ -309,7 +326,21 @@
       <div class="sheet-opt lesson" id="optLesson" onclick="toggleType('lesson')">
         <span class="icon">🎓</span>레슨
       </div>
+      <div class="sheet-opt memo" id="optMemo" onclick="toggleMemoPanel()">
+        <span class="icon">📝</span>메모
+      </div>
     </div>
+
+    <div class="memo-compose" id="memoCompose">
+      <div class="author-select">
+        <button class="author-btn eddie active" id="memoAuthorEddieBtn" onclick="selectMemoAuthor('eddie')">Eddie</button>
+        <button class="author-btn sam" id="memoAuthorSamBtn" onclick="selectMemoAuthor('sam')">Samantha</button>
+      </div>
+      <textarea class="journal-input" id="memoText" rows="2" placeholder="오늘 어땠나요?"></textarea>
+      <input class="journal-input" id="memoTag" placeholder="태그 (예: 폼 교정, 스매싱 연습)">
+      <button class="journal-submit" onclick="saveMemo()">메모 저장</button>
+    </div>
+
     <button class="sheet-close" onclick="closeSheet()">닫기</button>
   </div>
 </div>
@@ -487,11 +518,13 @@ function openSheet(d){
   const dow = new Date(curYear, curMonth, d).getDay();
   document.getElementById('sheetDate').textContent = `${curMonth+1}월 ${d}일 (${weekdayNames[dow]})`;
   updateSheetUI();
+  closeMemoPanel();
   document.getElementById('sheetBackdrop').classList.add('open');
 }
 
 function closeSheet(){
   document.getElementById('sheetBackdrop').classList.remove('open');
+  closeMemoPanel();
   selectedDay = null;
 }
 
@@ -524,13 +557,56 @@ function updateSheetUI(){
   document.getElementById('optLesson').classList.toggle('active', hasType(selectedDay, 'lesson'));
 }
 
+// ---- 시트 안의 메모 작성 패널 ----
+let memoAuthor = 'eddie';
+
+function toggleMemoPanel(){
+  const panel = document.getElementById('memoCompose');
+  const isOpen = panel.classList.toggle('open');
+  document.getElementById('optMemo').classList.toggle('active', isOpen);
+}
+
+function closeMemoPanel(){
+  document.getElementById('memoCompose').classList.remove('open');
+  document.getElementById('optMemo').classList.remove('active');
+  document.getElementById('memoText').value = '';
+  document.getElementById('memoTag').value = '';
+  selectMemoAuthor('eddie');
+}
+
+function selectMemoAuthor(author){
+  memoAuthor = author;
+  document.getElementById('memoAuthorEddieBtn').classList.toggle('active', author === 'eddie');
+  document.getElementById('memoAuthorSamBtn').classList.toggle('active', author === 'sam');
+}
+
+async function saveMemo(){
+  if(selectedDay === null) return;
+  const textEl = document.getElementById('memoText');
+  const tagEl = document.getElementById('memoTag');
+  const text = textEl.value.trim();
+  if(!text) return;
+
+  const dateStr = `${curYear}.${pad(curMonth+1)}.${pad(selectedDay)}`;
+  const ts = new Date(curYear, curMonth, selectedDay, 12, 0, 0).getTime();
+  const entry = { author: memoAuthor, date: dateStr, text, tag: tagEl.value.trim(), ts };
+
+  try{
+    await journalRef.push(entry);
+    closeMemoPanel();
+    journalShowAll = true; // 방금 쓴 글이 바로 보이도록
+  }catch(err){
+    console.error('메모 저장 실패', err);
+  }
+}
+
 // ---- 최초 연결: 이번 달 데이터를 실시간으로 구독 ----
 attachListener(curYear, curMonth);
 
 // ---- 운동 일지 (Firebase 실시간 연동) ----
-let journalAuthor = 'eddie';
 let journalShowAll = false;
 let journalData = {}; // { pushId: {author, date, text, tag, ts} }
+let editingKey = null;
 
 const journalRef = db.ref('pingpong-journal');
 journalRef.on('value', (snapshot) => {
@@ -541,7 +617,9 @@ journalRef.on('value', (snapshot) => {
 });
 
 function getSortedEntries(){
-  return Object.values(journalData).sort((a, b) => (b.ts||0) - (a.ts||0));
+  return Object.entries(journalData)
+    .map(([key, val]) => ({ key, ...val }))
+    .sort((a, b) => (b.ts||0) - (a.ts||0));
 }
 
 function renderJournal(){
@@ -557,16 +635,40 @@ function renderJournal(){
   entries.slice(0, visibleCount).forEach(e => {
     const row = document.createElement('div');
     row.className = 'entry';
-    row.innerHTML = `
-      <div class="entry-bar ${e.author}"></div>
-      <div class="entry-body">
-        <div class="entry-top">
-          <span class="entry-author ${e.author}">${e.author === 'eddie' ? 'Eddie' : 'Samantha'}</span>
-          <span class="entry-date">${e.date}</span>
-        </div>
-        <div class="entry-text">${escapeHtml(e.text)}</div>
-        ${e.tag ? `<span class="entry-tag ${e.author}">${escapeHtml(e.tag)}</span>` : ''}
-      </div>`;
+
+    if(editingKey === e.key){
+      row.innerHTML = `
+        <div class="entry-bar ${e.author}"></div>
+        <div class="entry-body">
+          <div class="entry-top">
+            <span class="entry-author ${e.author}">${e.author === 'eddie' ? 'Eddie' : 'Samantha'}</span>
+            <span class="entry-date">${e.date}</span>
+          </div>
+          <div class="entry-edit-form">
+            <textarea rows="2" id="editText-${e.key}">${escapeHtml(e.text)}</textarea>
+            <input id="editTag-${e.key}" value="${escapeHtml(e.tag||'')}" placeholder="태그">
+            <div class="entry-edit-actions">
+              <button class="save-btn" onclick="saveEditEntry('${e.key}')">저장</button>
+              <button class="cancel-btn" onclick="cancelEditEntry()">취소</button>
+            </div>
+          </div>
+        </div>`;
+    } else {
+      row.innerHTML = `
+        <div class="entry-bar ${e.author}"></div>
+        <div class="entry-body">
+          <div class="entry-top">
+            <span class="entry-author ${e.author}">${e.author === 'eddie' ? 'Eddie' : 'Samantha'}</span>
+            <span class="entry-date">${e.date}</span>
+          </div>
+          <div class="entry-text">${escapeHtml(e.text)}</div>
+          ${e.tag ? `<span class="entry-tag ${e.author}">${escapeHtml(e.tag)}</span>` : ''}
+          <div class="entry-actions">
+            <button class="entry-action-btn" onclick="startEditEntry('${e.key}')">수정</button>
+            <button class="entry-action-btn delete" onclick="deleteEntry('${e.key}')">삭제</button>
+          </div>
+        </div>`;
+    }
     wrap.appendChild(row);
   });
 
@@ -590,48 +692,38 @@ function toggleOlderEntries(){
   renderJournal();
 }
 
-function selectAuthor(author){
-  journalAuthor = author;
-  document.getElementById('authorEddieBtn').classList.toggle('active', author === 'eddie');
-  document.getElementById('authorSamBtn').classList.toggle('active', author === 'sam');
+function startEditEntry(key){
+  editingKey = key;
+  renderJournal();
 }
 
-async function addJournalEntry(){
-  const textEl = document.getElementById('journalText');
-  const tagEl = document.getElementById('journalTag');
-  const dateEl = document.getElementById('journalDate');
+function cancelEditEntry(){
+  editingKey = null;
+  renderJournal();
+}
+
+async function saveEditEntry(key){
+  const textEl = document.getElementById(`editText-${key}`);
+  const tagEl = document.getElementById(`editTag-${key}`);
   const text = textEl.value.trim();
   if(!text) return;
-
-  let y, m, d;
-  if(dateEl.value){
-    [y, m, d] = dateEl.value.split('-').map(Number);
-  } else {
-    const now = new Date();
-    y = now.getFullYear(); m = now.getMonth()+1; d = now.getDate();
-  }
-  const dateStr = `${y}.${pad(m)}.${pad(d)}`;
-  // 정렬 기준 시각: 선택한 날짜의 정오로 설정 (같은 날짜끼리는 작성 순서 유지 어려우니 대략적 정렬용)
-  const ts = new Date(y, m-1, d, 12, 0, 0).getTime();
-
-  const entry = { author: journalAuthor, date: dateStr, text, tag: tagEl.value.trim(), ts };
-  textEl.value = '';
-  tagEl.value = '';
-  journalShowAll = true; // 방금 쓴 글이 바로 보이도록
   try{
-    await journalRef.push(entry);
-    // 실제 반영은 위의 on('value') 리스너가 처리
+    await journalRef.child(key).update({ text, tag: tagEl.value.trim() });
+    editingKey = null;
+    // 실제 반영은 on('value') 리스너가 처리
   }catch(err){
-    console.error('일지 저장 실패', err);
+    console.error('일지 수정 실패', err);
   }
 }
 
-// 날짜 입력 필드 기본값 = 오늘
-(function initJournalDate(){
-  const dateEl = document.getElementById('journalDate');
-  const now = new Date();
-  dateEl.value = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
-})();
+async function deleteEntry(key){
+  if(!confirm('이 일지를 삭제할까요?')) return;
+  try{
+    await journalRef.child(key).remove();
+  }catch(err){
+    console.error('일지 삭제 실패', err);
+  }
+}
 </script>
 </body>
 </html>
