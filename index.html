@@ -174,6 +174,72 @@
     width:100%;padding:13px;border:none;border-radius:12px;
     background:var(--ivory);color:var(--ink);font-weight:700;font-size:14px;cursor:pointer;
   }
+  /* ---- 운동 일지 ---- */
+  :root{
+    --eddie:#3B6FA5;
+    --eddie-soft:#DCE7F2;
+    --sam:#3F8F5F;
+    --sam-soft:#DCEFE1;
+  }
+  .journal-card{
+    background:var(--card);
+    border-radius:16px;
+    padding:16px;
+    box-shadow:var(--shadow);
+    margin-top:14px;
+  }
+  .journal-title{
+    font-size:15px;font-weight:800;margin-bottom:12px;
+  }
+  .entry{
+    display:flex;gap:10px;
+    padding:10px 0;
+    border-bottom:1px solid var(--line);
+  }
+  .entry:last-child{border-bottom:none;}
+  .entry-bar{width:3px;border-radius:2px;flex-shrink:0;align-self:stretch;}
+  .entry-bar.eddie{background:var(--eddie);}
+  .entry-bar.sam{background:var(--sam);}
+  .entry-body{flex:1;min-width:0;}
+  .entry-top{display:flex;align-items:center;gap:6px;margin-bottom:3px;}
+  .entry-author{font-size:11px;font-weight:700;}
+  .entry-author.eddie{color:var(--eddie);}
+  .entry-author.sam{color:var(--sam);}
+  .entry-date{font-size:10.5px;color:var(--muted);}
+  .entry-text{font-size:13px;line-height:1.5;color:var(--ink);margin-bottom:6px;}
+  .entry-tag{
+    display:inline-block;font-size:10.5px;font-weight:600;
+    padding:3px 9px;border-radius:100px;
+  }
+  .entry-tag.eddie{background:var(--eddie-soft);color:var(--eddie);}
+  .entry-tag.sam{background:var(--sam-soft);color:var(--sam);}
+
+  .journal-more{
+    width:100%;margin-top:8px;padding:10px;
+    background:var(--ivory);border:none;border-radius:10px;
+    font-size:12px;color:var(--muted);font-weight:600;cursor:pointer;
+  }
+
+  .journal-add{
+    margin-top:14px;padding-top:14px;border-top:1px solid var(--line);
+  }
+  .author-select{display:flex;gap:8px;margin-bottom:10px;}
+  .author-btn{
+    flex:1;padding:9px 0;border-radius:10px;border:2px solid var(--line);
+    background:var(--ivory);font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;
+  }
+  .author-btn.eddie.active{background:var(--eddie-soft);border-color:var(--eddie);color:var(--eddie);}
+  .author-btn.sam.active{background:var(--sam-soft);border-color:var(--sam);color:var(--sam);}
+  .journal-input{
+    width:100%;border:1.5px solid var(--line);border-radius:10px;
+    padding:10px 12px;font-size:13px;font-family:'Noto Sans KR',sans-serif;
+    background:var(--ivory);color:var(--ink);margin-bottom:8px;resize:none;
+  }
+  .journal-input:focus{outline:none;border-color:var(--muted);}
+  .journal-submit{
+    width:100%;padding:12px;border:none;border-radius:10px;
+    background:var(--ink);color:#fff;font-weight:700;font-size:14px;cursor:pointer;
+  }
 </style>
 </head>
 <body>
@@ -212,6 +278,22 @@
       <span class="sun">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span class="sat">토</span>
     </div>
     <div class="grid" id="grid"></div>
+  </div>
+
+  <div class="journal-card">
+    <div class="journal-title">얼렁뚱땡 탁구단의 운동 일지</div>
+    <div id="journalEntries"></div>
+    <button class="journal-more" id="journalMoreBtn" onclick="toggleOlderEntries()">▼ 이전 일지 더 보기 (3개 더)</button>
+
+    <div class="journal-add">
+      <div class="author-select">
+        <button class="author-btn eddie active" id="authorEddieBtn" onclick="selectAuthor('eddie')">Eddie</button>
+        <button class="author-btn sam" id="authorSamBtn" onclick="selectAuthor('sam')">Samantha</button>
+      </div>
+      <textarea class="journal-input" id="journalText" rows="2" placeholder="오늘 어땠나요?"></textarea>
+      <input class="journal-input" id="journalTag" placeholder="태그 (예: 폼 교정, 스매싱 연습)">
+      <button class="journal-submit" onclick="addJournalEntry()">기록하기</button>
+    </div>
   </div>
 </div>
 
@@ -443,6 +525,94 @@ function updateSheetUI(){
 
 // ---- 최초 연결: 이번 달 데이터를 실시간으로 구독 ----
 attachListener(curYear, curMonth);
+
+// ---- 운동 일지 (Firebase 실시간 연동) ----
+let journalAuthor = 'eddie';
+let journalShowAll = false;
+let journalData = {}; // { pushId: {author, date, text, tag, ts} }
+
+const journalRef = db.ref('pingpong-journal');
+journalRef.on('value', (snapshot) => {
+  journalData = snapshot.val() || {};
+  renderJournal();
+}, (err) => {
+  console.error('일지 연결 실패', err);
+});
+
+function getSortedEntries(){
+  return Object.values(journalData).sort((a, b) => (b.ts||0) - (a.ts||0));
+}
+
+function renderJournal(){
+  const wrap = document.getElementById('journalEntries');
+  const entries = getSortedEntries();
+  const visibleCount = journalShowAll ? entries.length : Math.min(3, entries.length);
+  const hiddenCount = entries.length - visibleCount;
+
+  wrap.innerHTML = '';
+  if(entries.length === 0){
+    wrap.innerHTML = `<div style="text-align:center;color:var(--muted);font-size:12.5px;padding:14px 0;">아직 기록된 일지가 없어요.</div>`;
+  }
+  entries.slice(0, visibleCount).forEach(e => {
+    const row = document.createElement('div');
+    row.className = 'entry';
+    row.innerHTML = `
+      <div class="entry-bar ${e.author}"></div>
+      <div class="entry-body">
+        <div class="entry-top">
+          <span class="entry-author ${e.author}">${e.author === 'eddie' ? 'Eddie' : 'Samantha'}</span>
+          <span class="entry-date">${e.date}</span>
+        </div>
+        <div class="entry-text">${escapeHtml(e.text)}</div>
+        ${e.tag ? `<span class="entry-tag ${e.author}">${escapeHtml(e.tag)}</span>` : ''}
+      </div>`;
+    wrap.appendChild(row);
+  });
+
+  const moreBtn = document.getElementById('journalMoreBtn');
+  if(hiddenCount > 0){
+    moreBtn.style.display = 'block';
+    moreBtn.textContent = journalShowAll ? '▲ 접기' : `▼ 이전 일지 더 보기 (${hiddenCount}개 더)`;
+  } else {
+    moreBtn.style.display = 'none';
+  }
+}
+
+function escapeHtml(str){
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function toggleOlderEntries(){
+  journalShowAll = !journalShowAll;
+  renderJournal();
+}
+
+function selectAuthor(author){
+  journalAuthor = author;
+  document.getElementById('authorEddieBtn').classList.toggle('active', author === 'eddie');
+  document.getElementById('authorSamBtn').classList.toggle('active', author === 'sam');
+}
+
+async function addJournalEntry(){
+  const textEl = document.getElementById('journalText');
+  const tagEl = document.getElementById('journalTag');
+  const text = textEl.value.trim();
+  if(!text) return;
+  const today = new Date();
+  const dateStr = `${today.getFullYear()}.${pad(today.getMonth()+1)}.${pad(today.getDate())}`;
+  const entry = { author: journalAuthor, date: dateStr, text, tag: tagEl.value.trim(), ts: Date.now() };
+  textEl.value = '';
+  tagEl.value = '';
+  journalShowAll = true; // 방금 쓴 글이 바로 보이도록
+  try{
+    await journalRef.push(entry);
+    // 실제 반영은 위의 on('value') 리스너가 처리
+  }catch(err){
+    console.error('일지 저장 실패', err);
+  }
+}
 </script>
 </body>
 </html>
